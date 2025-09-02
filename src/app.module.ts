@@ -22,20 +22,21 @@ import { CustomerFile } from './shared/entities/customer-file.entity';
 import { CartItem } from './shared/entities/cart-item.entity';
 import { Role } from './shared/entities/role.entity';
 import { UserRole } from './shared/entities/user-role.entity';
+import { Logger } from '@nestjs/common'; // অ্যাড
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     TypeOrmModule.forRootAsync({
       useFactory: (configService: ConfigService) => ({
-      type: 'postgres',
-      url: configService.get<string>('DATABASE_URL') || 'postgresql://e_travel_user:wOTk40ldQYvHL1Ym1LhGdTCEafh3NeYD@dpg-d2ndo675r7bs73feu7n0-a.oregon-postgres.render.com/e_travel',
-      entities: [User, RefreshToken, Package, PackageData, PackageImage, Order, OrderItem, CustomerData, CustomerFile, CartItem, Role, UserRole],
-      synchronize: false,  // এটা false করো
-      ssl: {
-        rejectUnauthorized: false,
-      },
-    }),
+        type: 'postgres',
+        url: configService.get<string>('DATABASE_URL') || 'postgresql://e_travel_user:wOTk40ldQYvHL1Ym1LhGdTCEafh3NeYD@dpg-d2ndo675r7bs73feu7n0-a.oregon-postgres.render.com/e_travel',
+        entities: [User, RefreshToken, Package, PackageData, PackageImage, Order, OrderItem, CustomerData, CustomerFile, CartItem, Role, UserRole],
+        synchronize: false,  // এটা false করো
+        ssl: {
+          rejectUnauthorized: false,
+        },
+      }),
       inject: [ConfigService],
     }),
     TypeOrmModule.forFeature([User, Role, UserRole]),
@@ -57,9 +58,17 @@ import { UserRole } from './shared/entities/user-role.entity';
   providers: [ContextSeedService],
 })
 export class AppModule implements OnModuleInit {
+  private readonly logger = new Logger(AppModule.name); // লগ অ্যাড
+
   constructor(private readonly contextSeedService: ContextSeedService) {}
 
   async onModuleInit() {
-    await this.contextSeedService.initializeContext(); // Seed data on init
+    this.logger.log('onModuleInit: Starting database seeding...');
+    try {
+      await this.contextSeedService.initializeContext(); // Seed data on init
+      this.logger.log('onModuleInit: Database seeding completed successfully.');
+    } catch (error) {
+      this.logger.error(`onModuleInit: Error during seeding - ${error.message}`);
+    }
   }
 }

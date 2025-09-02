@@ -1,6 +1,4 @@
-// ------------------------------------------------
-// src/shared/services/context-seed.service.ts (ContextSeedService)
-// ------------------------------------------------
+// src/shared/services/context-seed.service.ts
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -9,9 +7,12 @@ import { UserRole } from '../entities/user-role.entity';
 import * as bcrypt from 'bcrypt';
 import { ConfigService } from '@nestjs/config';
 import { User } from '../entities/user.entity';
+import { Logger } from '@nestjs/common'; // অ্যাড
 
 @Injectable()
 export class ContextSeedService {
+  private readonly logger = new Logger(ContextSeedService.name); // লগ অ্যাড
+
   constructor(
     @InjectRepository(User) private readonly userRepository: Repository<User>,
     @InjectRepository(Role) private readonly roleRepository: Repository<Role>,
@@ -20,17 +21,22 @@ export class ContextSeedService {
   ) {}
 
   async initializeContext(): Promise<void> {
-    // Seed roles if none exist
+    this.logger.log('initializeContext: Checking roles...');
     const roles = await this.roleRepository.find();
     if (roles.length === 0) {
+      this.logger.log('initializeContext: Seeding roles...');
       await this.roleRepository.save({ name: 'Admin' });
       await this.roleRepository.save({ name: 'Manager' });
       await this.roleRepository.save({ name: 'Customer' });
+      this.logger.log('initializeContext: Roles seeded successfully.');
+    } else {
+      this.logger.log('initializeContext: Roles already exist, skipping seeding.');
     }
 
-    // Seed admin user if none exist
+    this.logger.log('initializeContext: Checking users...');
     const users = await this.userRepository.find();
     if (users.length === 0) {
+      this.logger.log('initializeContext: Seeding admin user...');
       const adminRole = await this.roleRepository.findOne({ where: { name: 'Admin' } });
       const managerRole = await this.roleRepository.findOne({ where: { name: 'Manager' } });
       const customerRole = await this.roleRepository.findOne({ where: { name: 'Customer' } });
@@ -44,10 +50,14 @@ export class ContextSeedService {
         passwordHash: await bcrypt.hash('123456', 10),
       });
       await this.userRepository.save(admin);
+      this.logger.log(`initializeContext: Admin user created with ID: ${admin.id}`);
 
       await this.userRoleRepository.save({ userId: admin.id, roleId: adminRole.id });
       await this.userRoleRepository.save({ userId: admin.id, roleId: managerRole.id });
       await this.userRoleRepository.save({ userId: admin.id, roleId: customerRole.id });
+      this.logger.log('initializeContext: Admin roles assigned.');
+    } else {
+      this.logger.log('initializeContext: Users already exist, skipping seeding.');
     }
   }
 }

@@ -1,16 +1,18 @@
-// ------------------------------------------------
-// src/shared/services/email.service.ts (EmailService)
-// ------------------------------------------------
+// src/shared/services/email.service.ts
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as nodemailer from 'nodemailer';
 import { EmailSendDto } from '../dtos/email-send.dto';
+import { Logger } from '@nestjs/common'; // অ্যাড
 
 @Injectable()
 export class EmailService {
+  private readonly logger = new Logger(EmailService.name); // লগ অ্যাড
+
   constructor(private readonly configService: ConfigService) {}
 
   async sendEmailAsync(emailSend: EmailSendDto): Promise<boolean> {
+    this.logger.log(`sendEmailAsync: Sending email to: ${emailSend.to}, subject: ${emailSend.subject}`);
     // Use Gmail as default, like in ASP.NET
     const transporter = nodemailer.createTransport({
       host: this.configService.get<string>('GMAIL_HOST') || 'smtp.gmail.com',
@@ -31,9 +33,10 @@ export class EmailService {
 
     try {
       await transporter.sendMail(mailOptions);
+      this.logger.log(`sendEmailAsync: Email sent successfully to ${emailSend.to}`);
       return true;
     } catch (error) {
-      console.error(error);
+      this.logger.error(`sendEmailAsync: Error sending email - ${error.message}`);
       return false;
     }
   }

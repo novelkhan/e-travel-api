@@ -8,11 +8,11 @@ async function bootstrap() {
 
   // CORS setup
   app.enableCors({
-    origin: ['http://localhost:4200', 'http://localhost:5173'], // ফ্রন্টএন্ড URL স্পেসিফিক করো (যেমন Angular-এর জন্য)
-    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS', // OPTIONS অ্যাড করো
-    credentials: true, // কুকি/অথেন্টিকেশন সাপোর্ট
-    allowedHeaders: 'Content-Type, Authorization, X-Requested-With', // প্রয়োজনীয় হেডার
-  });
+  origin: true,//['http://localhost:4200', 'http://localhost:5173'],
+  methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
+  credentials: true,
+  allowedHeaders: 'Content-Type, Authorization, X-Requested-With',
+});
 
   // Swagger setup
   const config = new DocumentBuilder()
