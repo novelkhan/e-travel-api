@@ -7,10 +7,10 @@ export class UserRole {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @Column()
+  @Column({ nullable: true })
   userId: string;
 
-  @Column()
+  @Column({ nullable: true })
   roleId: string;
 
   @ManyToOne(() => User, (user) => user.userRoles)

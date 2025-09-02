@@ -1,18 +1,19 @@
-import { Controller, Post, UseGuards, Request, UseInterceptors, UploadedFiles } from '@nestjs/common';
-import { CustomerService } from './customer.service';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { FilesInterceptor } from '@nestjs/platform-express';
-import { ApiTags } from '@nestjs/swagger';
+// ------------------------------------------------
+// src/customer/customer.controller.ts
+// ------------------------------------------------
+import { Controller, Get, UseGuards } from '@nestjs/common';
+import { JwtAuthGuard } from '../shared/guards/jwt.guard';
+import { UserService } from '../shared/services/user.service';
 
-@ApiTags('customer')
-@Controller('api/customer')
+@Controller('customer')
 @UseGuards(JwtAuthGuard)
 export class CustomerController {
-  constructor(private readonly customerService: CustomerService) {}
+  constructor(private readonly userService: UserService) {}
 
-  @Post('upload-files')
-  @UseInterceptors(FilesInterceptor('files'))
-  async uploadFiles(@UploadedFiles() files: Express.Multer.File[], @Request() req) {
-    return this.customerService.uploadFiles(files, req.user);
+  @Get('get-customers')
+  getCustomers() {
+    return { message: 'Only authorized users can view this action method' };
   }
+
+  // Other methods are private helpers, not endpoints
 }

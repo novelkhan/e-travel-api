@@ -1,14 +1,17 @@
+// ------------------------------------------------
+// src/customer/customer.module.ts
+// ------------------------------------------------
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { CustomerController } from './customer.controller';
-import { CustomerService } from './customer.service';
-import { CustomerData } from '../entities/customer-data.entity';
-import { CustomerFile } from '../entities/customer-file.entity';
-import { AuthModule } from '../auth/auth.module';
+import { UserService } from '../shared/services/user.service';
+import { User } from '../shared/entities/user.entity';
+import { Role } from '../shared/entities/role.entity';
+import { UserRole } from '../shared/entities/user-role.entity';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([CustomerData, CustomerFile]), AuthModule],
+  imports: [TypeOrmModule.forFeature([User, Role, UserRole])], // Add Role and UserRole
   controllers: [CustomerController],
-  providers: [CustomerService],
+  providers: [UserService],
 })
 export class CustomerModule {}

@@ -1,20 +1,17 @@
+// ------------------------------------------------
+// src/admin/admin.module.ts
+// ------------------------------------------------
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AdminController } from './admin.controller';
-import { AdminService } from './admin.service';
-import { User } from '../entities/user.entity';
-import { Package } from '../entities/package.entity';
-import { PackageData } from '../entities/package-data.entity';
-import { PackageImage } from '../entities/package-image.entity';
-import { Order } from '../entities/order.entity';
-import { AuthModule } from '../auth/auth.module';
+import { UserService } from '../shared/services/user.service';
+import { Role } from '../shared/entities/role.entity';
+import { UserRole } from '../shared/entities/user-role.entity';
+import { User } from 'src/shared/entities/user.entity';
 
 @Module({
-  imports: [
-    TypeOrmModule.forFeature([User, Package, PackageData, PackageImage, Order]),
-    AuthModule,
-  ],
+  imports: [TypeOrmModule.forFeature([User, Role, UserRole])],
   controllers: [AdminController],
-  providers: [AdminService],
+  providers: [UserService],
 })
 export class AdminModule {}
