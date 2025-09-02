@@ -32,17 +32,27 @@ export class UserService {
     return user;
   }
 
-  async findByIdAsync(id: string): Promise<User> {
-    return this.userRepository.findOne({ where: { id } });
-  }
+  // src/shared/services/user.service.ts
+async findByNameAsync(userName: string): Promise<User> {
+  return this.userRepository.findOne({
+    where: { userName: userName.toLowerCase() },
+    relations: ['userRoles', 'userRoles.role', 'refreshTokens'],  // refreshTokens অ্যাড করো
+  });
+}
 
-  async findByEmailAsync(email: string): Promise<User> {
-    return this.userRepository.findOne({ where: { email: email.toLowerCase() } });
-  }
+async findByIdAsync(id: string): Promise<User> {
+  return this.userRepository.findOne({
+    where: { id },
+    relations: ['userRoles', 'userRoles.role', 'refreshTokens'],  // refreshTokens অ্যাড করো
+  });
+}
 
-  async findByNameAsync(userName: string): Promise<User> {
-    return this.userRepository.findOne({ where: { userName: userName.toLowerCase() } });
-  }
+async findByEmailAsync(email: string): Promise<User> {
+  return this.userRepository.findOne({
+    where: { email: email.toLowerCase() },
+    relations: ['userRoles', 'userRoles.role', 'refreshTokens'],  // refreshTokens অ্যাড করো
+  });
+}
 
   async checkPasswordSignInAsync(user: User, password: string): Promise<{ succeeded: boolean; isLockedOut: boolean }> {
     const isMatch = await bcrypt.compare(password, user.passwordHash);

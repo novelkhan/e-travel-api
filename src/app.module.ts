@@ -28,14 +28,14 @@ import { UserRole } from './shared/entities/user-role.entity';
     ConfigModule.forRoot({ isGlobal: true }),
     TypeOrmModule.forRootAsync({
       useFactory: (configService: ConfigService) => ({
-        type: 'postgres',
-        url: configService.get<string>('DATABASE_URL') || 'postgresql://e_travel_user:wOTk40ldQYvHL1Ym1LhGdTCEafh3NeYD@dpg-d2ndo675r7bs73feu7n0-a.oregon-postgres.render.com/e_travel',
-        entities: [User, RefreshToken, Package, PackageData, PackageImage, Order, OrderItem, CustomerData, CustomerFile, CartItem, Role, UserRole],
-        synchronize: true, // For development, auto-migrate
-        ssl: {
-          rejectUnauthorized: false, // Render.com এর জন্য প্রয়োজন
-        },
-      }),
+      type: 'postgres',
+      url: configService.get<string>('DATABASE_URL') || 'postgresql://e_travel_user:wOTk40ldQYvHL1Ym1LhGdTCEafh3NeYD@dpg-d2ndo675r7bs73feu7n0-a.oregon-postgres.render.com/e_travel',
+      entities: [User, RefreshToken, Package, PackageData, PackageImage, Order, OrderItem, CustomerData, CustomerFile, CartItem, Role, UserRole],
+      synchronize: false,  // এটা false করো
+      ssl: {
+        rejectUnauthorized: false,
+      },
+    }),
       inject: [ConfigService],
     }),
     TypeOrmModule.forFeature([User, Role, UserRole]),
