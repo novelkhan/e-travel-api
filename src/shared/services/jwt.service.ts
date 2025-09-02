@@ -66,9 +66,9 @@ export class JwtService {
     return new Date() < refreshToken.dateExpiresUtc;
   }
 
+  // src/shared/services/jwt.service.ts
   async saveRefreshToken(user: User): Promise<void> {
     const refreshToken = await this.createRefreshToken(user);
-    // In ASP.NET, it updates if exists, here same
     const existing = await this.refreshTokenRepository.findOne({ where: { userId: user.id } });
     if (existing) {
       existing.token = refreshToken.token;
@@ -76,6 +76,8 @@ export class JwtService {
       existing.dateExpiresUtc = refreshToken.dateExpiresUtc;
       await this.refreshTokenRepository.save(existing);
     } else {
+      // নতুন টোকেন অ্যাড করো এবং user save করো
+      user.refreshTokens = user.refreshTokens || [];
       user.refreshTokens.push(refreshToken);
       await this.userRepository.save(user);
     }

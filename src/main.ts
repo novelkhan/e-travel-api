@@ -1,6 +1,4 @@
-// ------------------------------------------------
 // src/main.ts
-// ------------------------------------------------
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
@@ -8,7 +6,15 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
-  // Swagger setup (exact like ASP.NET)
+  // CORS setup
+  app.enableCors({
+    origin: ['http://localhost:4200', 'http://localhost:5173'], // ফ্রন্টএন্ড URL স্পেসিফিক করো (যেমন Angular-এর জন্য)
+    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS', // OPTIONS অ্যাড করো
+    credentials: true, // কুকি/অথেন্টিকেশন সাপোর্ট
+    allowedHeaders: 'Content-Type, Authorization, X-Requested-With', // প্রয়োজনীয় হেডার
+  });
+
+  // Swagger setup
   const config = new DocumentBuilder()
     .setTitle('ETravelApi')
     .setDescription('The ETravel API description')
@@ -20,13 +26,6 @@ async function bootstrap() {
 
   // Global prefix 'api' for all endpoints
   app.setGlobalPrefix('api');
-
-  // CORS setup (exact like ASP.NET)
-  app.enableCors({
-    origin: true, // Allow all origins or specify your frontend URLs
-    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
-    credentials: true,
-  });
 
   await app.listen(7039); // Port 7039 like ASP.NET
 }

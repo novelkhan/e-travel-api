@@ -225,8 +225,17 @@ export class AccountController {
     }
   }
 
+  // src/account/account.controller.ts
   private async createApplicationUserDto(user: User, res: Response | null): Promise<UserDto> {
     await this.jwtService.saveRefreshToken(user);
+    
+    // নতুন: user reload করো যাতে refreshTokens আপডেট হয়
+    user = await this.userService.findByIdAsync(user.id);  // findByIdAsync-এ relations আছে
+    
+    if (!user.refreshTokens || user.refreshTokens.length === 0) {
+      throw new Error('Refresh token not generated');
+    }
+    
     const dto = {
       firstName: user.firstName,
       lastName: user.lastName,
