@@ -7,11 +7,11 @@ import { UserRole } from '../entities/user-role.entity';
 import * as bcrypt from 'bcrypt';
 import { ConfigService } from '@nestjs/config';
 import { User } from '../entities/user.entity';
-import { Logger } from '@nestjs/common'; // অ্যাড
+import { Logger } from '@nestjs/common';
 
 @Injectable()
 export class ContextSeedService {
-  private readonly logger = new Logger(ContextSeedService.name); // লগ অ্যাড
+  private readonly logger = new Logger(ContextSeedService.name);
 
   constructor(
     @InjectRepository(User) private readonly userRepository: Repository<User>,
@@ -28,6 +28,7 @@ export class ContextSeedService {
       await this.roleRepository.save({ name: 'Admin' });
       await this.roleRepository.save({ name: 'Manager' });
       await this.roleRepository.save({ name: 'Customer' });
+      await this.roleRepository.save({ name: 'Player' }); // Player রোল যোগ করা
       this.logger.log('initializeContext: Roles seeded successfully.');
     } else {
       this.logger.log('initializeContext: Roles already exist, skipping seeding.');
@@ -40,6 +41,7 @@ export class ContextSeedService {
       const adminRole = await this.roleRepository.findOne({ where: { name: 'Admin' } });
       const managerRole = await this.roleRepository.findOne({ where: { name: 'Manager' } });
       const customerRole = await this.roleRepository.findOne({ where: { name: 'Customer' } });
+      const playerRole = await this.roleRepository.findOne({ where: { name: 'Player' } }); // Player রোল
 
       const admin = this.userRepository.create({
         firstName: 'Novel',
@@ -53,8 +55,9 @@ export class ContextSeedService {
       this.logger.log(`initializeContext: Admin user created with ID: ${admin.id}`);
 
       await this.userRoleRepository.save({ userId: admin.id, roleId: adminRole.id });
-      await this.userRoleRepository.save({ userId: admin.id, roleId: managerRole.id });
-      await this.userRoleRepository.save({ userId: admin.id, roleId: customerRole.id });
+      //await this.userRoleRepository.save({ userId: admin.id, roleId: managerRole.id });
+      //await this.userRoleRepository.save({ userId: admin.id, roleId: customerRole.id });
+      //await this.userRoleRepository.save({ userId: admin.id, roleId: playerRole.id }); // Player রোল অ্যাসাইন
       this.logger.log('initializeContext: Admin roles assigned.');
     } else {
       this.logger.log('initializeContext: Users already exist, skipping seeding.');

@@ -7,11 +7,11 @@ import { Repository } from 'typeorm';
 import { RefreshToken } from '../entities/refresh-token.entity';
 import * as crypto from 'crypto';
 import { User } from '../entities/user.entity';
-import { Logger } from '@nestjs/common'; // অ্যাড
+import { Logger } from '@nestjs/common';
 
 @Injectable()
 export class JwtService {
-  private readonly logger = new Logger(JwtService.name); // লগ অ্যাড
+  private readonly logger = new Logger(JwtService.name);
 
   constructor(
     private readonly nestJwtService: NestJwtService,
@@ -30,13 +30,13 @@ export class JwtService {
       email: user.userName,
       given_name: user.firstName,
       surname: user.lastName,
-      roles: roles,
+      role: roles,
     };
     const jwt = this.nestJwtService.sign(payload, {
       expiresIn: this.configService.get<number>('JWT_EXPIRES_IN_MINUTES') || 30,
       issuer: this.configService.get<string>('JWT_ISSUER') || 'https://localhost:7039',
     });
-    this.logger.log(`createJwt: JWT created successfully.`);
+    this.logger.log(`createJwt: JWT created with roles: ${roles.join(', ')}`);
     return jwt;
   }
 
@@ -63,7 +63,11 @@ export class JwtService {
       where: { id: userId },
       relations: ['userRoles', 'userRoles.role'],
     });
-    const roles = user.userRoles.map(ur => ur.role.name);
+    if (!user) {
+      this.logger.warn(`getUserRoles: User not found for ID: ${userId}`);
+      return [];
+    }
+    const roles = user.userRoles.map((ur) => ur.role.name);
     this.logger.log(`getUserRoles: Roles: ${roles.join(', ')}`);
     return roles;
   }
@@ -95,7 +99,6 @@ export class JwtService {
       await this.refreshTokenRepository.save(existing);
       this.logger.log('saveRefreshToken: Existing token updated.');
     } else {
-      // নতুন টোকেন অ্যাড করো এবং user save করো
       user.refreshTokens = user.refreshTokens || [];
       user.refreshTokens.push(refreshToken);
       await this.userRepository.save(user);
