@@ -22,6 +22,7 @@ export class JwtService {
     private readonly userRepository: Repository<User>,
   ) {}
 
+  // src/shared/services/jwt.service.ts
   async createJwt(user: User): Promise<string> {
     this.logger.log(`createJwt: Creating JWT for user ID: ${user.id}`);
     const roles = await this.getUserRoles(user.id);
@@ -32,10 +33,14 @@ export class JwtService {
       surname: user.lastName,
       role: roles,
     };
+    
+    const expiresIn = this.configService.get<string>('JWT_EXPIRES_IN_MINUTES') + 'm' || '30m';
+    
     const jwt = this.nestJwtService.sign(payload, {
-      expiresIn: this.configService.get<number>('JWT_EXPIRES_IN_MINUTES') || 30,
+      expiresIn: expiresIn, // সঠিক format এ দিন
       issuer: this.configService.get<string>('JWT_ISSUER') || 'https://localhost:7039',
     });
+    
     this.logger.log(`createJwt: JWT created with roles: ${roles.join(', ')}`);
     return jwt;
   }

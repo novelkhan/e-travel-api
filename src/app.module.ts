@@ -23,6 +23,8 @@ import { CartItem } from './shared/entities/cart-item.entity';
 import { Role } from './shared/entities/role.entity';
 import { UserRole } from './shared/entities/user-role.entity';
 import { Logger } from '@nestjs/common'; // অ্যাড
+import { PassportModule } from '@nestjs/passport'; // নতুন যোগ করা
+import { JwtStrategy } from './shared/strategies/jwt.strategy'; // নতুন যোগ করা
 
 @Module({
   imports: [
@@ -48,6 +50,7 @@ import { Logger } from '@nestjs/common'; // অ্যাড
       inject: [ConfigService],
       global: true,
     }),
+    PassportModule.register({ defaultStrategy: 'jwt' }), // নতুন যোগ করা
     AccountModule,
     AdminModule,
     CustomerModule,
@@ -55,7 +58,7 @@ import { Logger } from '@nestjs/common'; // অ্যাড
     OrderModule,
     PackageModule,
   ],
-  providers: [ContextSeedService],
+  providers: [ContextSeedService, JwtStrategy], // নতুন যোগ করা: JwtStrategy
 })
 export class AppModule implements OnModuleInit {
   private readonly logger = new Logger(AppModule.name); // লগ অ্যাড
