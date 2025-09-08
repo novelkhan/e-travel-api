@@ -20,17 +20,20 @@ export class UserService {
     private readonly entityManager: EntityManager,
   ) {}
 
-  async createAsync(registerDto: RegisterDto): Promise<User> {
+  // src/shared/services/user.service.ts
+  async createAsync(registerDto: RegisterDto, isEmailConfirmed: boolean = false): Promise<User> {
     this.logger.log(`createAsync: Creating user for email: ${registerDto.email}`);
     const hashedPassword = await bcrypt.hash(registerDto.password, 10);
+    
     const user = this.userRepository.create({
       firstName: registerDto.firstName.toLowerCase(),
       lastName: registerDto.lastName.toLowerCase(),
       userName: registerDto.email.toLowerCase(),
       email: registerDto.email.toLowerCase(),
       passwordHash: hashedPassword,
-      emailConfirmed: false,
+      emailConfirmed: isEmailConfirmed, // Admin দ্বারা add করলে true set হবে
     });
+    
     await this.userRepository.save(user);
     this.logger.log(`createAsync: User created with ID: ${user.id}`);
     return user;

@@ -60,25 +60,29 @@ export class AdminController {
     };
   }
 
+  // src/admin/admin.controller.ts
   @Post('add-edit-member')
   async addEditMember(@Body() model: MemberAddEditDto, @Res() res: Response) {
     let user: User;
 
     if (!model.id) {
-      // Adding new
+      // Adding new member - Admin দ্বারা add করছে
       if (!model.password || model.password.length < 6) {
         res.status(HttpStatus.BAD_REQUEST).json('Password must be at least 6 characters');
         return;
       }
+      
+      // Admin দ্বারা user create করলে email confirmed=true দিয়ে create করুন
       user = await this.userService.createAsync({
         firstName: model.firstName.toLowerCase(),
         lastName: model.lastName.toLowerCase(),
-        email: model.userName.toLowerCase(), // Use userName as email
+        email: model.userName.toLowerCase(),
         password: model.password,
-      });
+      }, true); // দ্বিতীয় parameter true pass করুন
+      
       res.json({ title: 'Member Created', message: `${model.userName} has been created` });
     } else {
-      // Editing
+      // Editing existing member
       if (model.password && model.password.length < 6) {
         res.status(HttpStatus.BAD_REQUEST).json('Password must be at least 6 characters');
         return;
@@ -87,18 +91,23 @@ export class AdminController {
         res.status(HttpStatus.BAD_REQUEST).json('Super Admin change is not allowed');
         return;
       }
+      
       user = await this.userService.findByIdAsync(model.id);
       if (!user) throw new Error('User not found');
+      
       user.firstName = model.firstName.toLowerCase();
       user.lastName = model.lastName.toLowerCase();
       user.userName = model.userName.toLowerCase();
+      
       if (model.password) {
         user.passwordHash = await bcrypt.hash(model.password, 10);
       }
+      
       await this.userService.updateAsync(user);
       res.json({ title: 'Member Edited', message: `${model.userName} has been updated` });
     }
 
+    // Roles management
     const userRoles = await this.userService.getRolesAsync(user);
     await this.userService.removeFromRolesAsync(user, userRoles);
 
