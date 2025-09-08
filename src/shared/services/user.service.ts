@@ -1,7 +1,7 @@
 // src/shared/services/user.service.ts
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { EntityManager, Repository } from 'typeorm';
 import { Role } from '../entities/role.entity';
 import { UserRole } from '../entities/user-role.entity';
 import * as bcrypt from 'bcrypt';
@@ -17,6 +17,7 @@ export class UserService {
     @InjectRepository(User) private readonly userRepository: Repository<User>,
     @InjectRepository(Role) private readonly roleRepository: Repository<Role>,
     @InjectRepository(UserRole) private readonly userRoleRepository: Repository<UserRole>,
+    private readonly entityManager: EntityManager,
   ) {}
 
   async createAsync(registerDto: RegisterDto): Promise<User> {
@@ -177,7 +178,16 @@ export class UserService {
 
   async deleteAsync(user: User): Promise<void> {
     this.logger.log(`deleteAsync: Deleting user ID: ${user.id}`);
-    await this.userRepository.remove(user);
+  
+    // Transaction ব্যবহার করুন
+    await this.entityManager.transaction(async (transactionalEntityManager) => {
+      // First delete user roles
+      await transactionalEntityManager.delete(UserRole, { userId: user.id });
+      
+      // Then delete the user
+      await transactionalEntityManager.remove(User, user);
+    });
+    
     this.logger.log(`deleteAsync: Deletion successful.`);
   }
 
