@@ -121,8 +121,13 @@ export class AdminController {
     const user = await this.userService.findByIdAsync(id);
     if (!user) throw new Error('User not found');
     if (await this.isAdminUserId(id)) throw new Error('Super Admin change is not allowed');
-    user.lockoutEnd = new Date(Date.now() + 5 * 24 * 60 * 60 * 1000);
+    
+    // 24 ঘন্টার জন্য lockout
+    user.lockoutEnd = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    user.lockoutEnabled = true;
     await this.userService.updateAsync(user);
+    
+    return { message: 'User locked successfully' };
   }
 
   @Put('unlock-member/:id')
@@ -130,8 +135,13 @@ export class AdminController {
     const user = await this.userService.findByIdAsync(id);
     if (!user) throw new Error('User not found');
     if (await this.isAdminUserId(id)) throw new Error('Super Admin change is not allowed');
+    
     user.lockoutEnd = null;
+    user.lockoutEnabled = false;
+    user.accessFailedCount = 0;
     await this.userService.updateAsync(user);
+    
+    return { message: 'User unlocked successfully' };
   }
 
   @Put('unConfirmEmail/:id')

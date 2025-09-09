@@ -46,22 +46,39 @@ export class AccountController {
     throw new HttpException('Invalid or expired token, please try to login', HttpStatus.UNAUTHORIZED);
   }
 
+  // src/account/account.controller.ts
   @UseGuards(JwtAuthGuard)
   @Get('refresh-page')
   async refreshPage(@Req() req: Request): Promise<UserDto> {
     const user = await this.userService.findByNameAsync(req.user['username']);
     if (!user) throw new HttpException('User not found', HttpStatus.UNAUTHORIZED);
 
+    // Lockout status চেক করুন
     if (await this.userService.isLockedOutAsync(user)) {
-      throw new HttpException('You have been locked out', HttpStatus.UNAUTHORIZED);
+      const lockoutEnd = user.lockoutEnd.toUTCString();
+      throw new HttpException(
+        `Your account has been locked. You should wait until ${lockoutEnd} (UTC time) to be able to login`,
+        HttpStatus.UNAUTHORIZED,
+      );
     }
+
     return await this.createApplicationUserDto(user);
   }
 
+  // src/account/account.controller.ts
   @Post('login')
   async login(@Body() model: LoginDto): Promise<UserDto> {
     const user = await this.userService.findByNameAsync(model.userName);
     if (!user) throw new HttpException('Invalid username or password', HttpStatus.UNAUTHORIZED);
+
+    // প্রথমেই lockout status চেক করুন
+    if (await this.userService.isLockedOutAsync(user)) {
+      const lockoutEnd = user.lockoutEnd.toUTCString();
+      throw new HttpException(
+        `Your account has been locked. You should wait until ${lockoutEnd} (UTC time) to be able to login`,
+        HttpStatus.UNAUTHORIZED,
+      );
+    }
 
     if (!user.emailConfirmed) {
       throw new HttpException('Please confirm your email.', HttpStatus.UNAUTHORIZED);
@@ -70,29 +87,20 @@ export class AccountController {
     const result = await this.userService.checkPasswordSignInAsync(user, model.password);
 
     if (result.isLockedOut) {
+      const lockoutEnd = user.lockoutEnd.toUTCString();
       throw new HttpException(
-        `Your account has been locked. Wait until ${user.lockoutEnd} (UTC) to login`,
+        `Your account has been locked. You should wait until ${lockoutEnd} (UTC time) to be able to login`,
         HttpStatus.UNAUTHORIZED,
       );
     }
 
     if (!result.succeeded) {
-      user.accessFailedCount++;
-      if (user.accessFailedCount >= 3) {
-        user.lockoutEnd = new Date(Date.now() + 24 * 60 * 60 * 1000);
-        await this.userService.updateAsync(user);
-        throw new HttpException(
-          `Your account has been locked. Wait until ${user.lockoutEnd} (UTC)`,
-          HttpStatus.UNAUTHORIZED,
-        );
-      }
-      await this.userService.updateAsync(user);
-      throw new HttpException('Invalid username or password', HttpStatus.UNAUTHORIZED);
+      const remainingAttempts = 3 - user.accessFailedCount;
+      throw new HttpException(
+        `Invalid username or password. ${remainingAttempts} attempt(s) remaining before lockout.`,
+        HttpStatus.UNAUTHORIZED,
+      );
     }
-
-    user.accessFailedCount = 0;
-    user.lockoutEnd = null;
-    await this.userService.updateAsync(user);
 
     return await this.createApplicationUserDto(user);
   }

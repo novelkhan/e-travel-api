@@ -83,18 +83,31 @@ export class UserService {
 
   async checkPasswordSignInAsync(user: User, password: string): Promise<{ succeeded: boolean; isLockedOut: boolean }> {
     this.logger.log(`checkPasswordSignInAsync: Checking password for user ID: ${user.id}`);
+    
+    // প্রথমে lockout status চেক করুন
+    if (await this.isLockedOutAsync(user)) {
+      this.logger.warn(`checkPasswordSignInAsync: User ${user.id} is locked out`);
+      return { succeeded: false, isLockedOut: true };
+    }
+
     const isMatch = await bcrypt.compare(password, user.passwordHash);
+    
     if (!isMatch) {
       this.logger.warn(`checkPasswordSignInAsync: Password mismatch for user ID: ${user.id}`);
       user.accessFailedCount++;
+      
+      // 3 বার ভুল পাসওয়ার্ড দিলে lockout enable করুন
       if (user.accessFailedCount >= 3) {
         user.lockoutEnd = new Date(Date.now() + 24 * 60 * 60 * 1000); // 1 day lockout
         user.lockoutEnabled = true;
-        this.logger.log(`checkPasswordSignInAsync: User locked out - ID: ${user.id}`);
+        this.logger.log(`checkPasswordSignInAsync: User locked out - ID: ${user.id}, until: ${user.lockoutEnd}`);
       }
+      
       await this.userRepository.save(user);
       return { succeeded: false, isLockedOut: user.lockoutEnabled };
     }
+    
+    // সঠিক পাসওয়ার্ড দিলে reset করুন
     user.accessFailedCount = 0;
     user.lockoutEnd = null;
     user.lockoutEnabled = false;
@@ -135,8 +148,12 @@ export class UserService {
   }
 
   async isLockedOutAsync(user: User): Promise<boolean> {
-    const isLocked = user.lockoutEnabled && user.lockoutEnd > new Date();
-    this.logger.log(`isLockedOutAsync: User ID ${user.id} locked: ${isLocked}`);
+    if (!user.lockoutEnabled || !user.lockoutEnd) {
+      return false;
+    }
+    
+    const isLocked = new Date() < new Date(user.lockoutEnd);
+    this.logger.log(`isLockedOutAsync: User ID ${user.id} locked: ${isLocked}, until: ${user.lockoutEnd}`);
     return isLocked;
   }
 
