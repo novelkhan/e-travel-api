@@ -12,7 +12,11 @@ export class CustomerController {
 
   @Get('get-customers')
   getCustomers() {
-    return { message: 'Only authorized users can view this action method' };
+    return { 
+      value: { 
+        message: 'Only authorized users can view this action method' 
+      } 
+    };
   }
 
   // Other methods are private helpers, not endpoints
