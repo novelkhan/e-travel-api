@@ -48,7 +48,7 @@ export class User {
   @JoinColumn()
   customerData: CustomerData;
 
-  @OneToMany(() => RefreshToken, (refreshToken) => refreshToken.user, { cascade: true })
+  @OneToMany(() => RefreshToken, (refreshToken) => refreshToken.user, { cascade: true, eager: true  })
   refreshTokens: RefreshToken[];
 
 

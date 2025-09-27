@@ -93,21 +93,30 @@ export class JwtService {
     return isValid;
   }
 
+  // src/shared/services/jwt.service.ts - saveRefreshToken মেথড
   async saveRefreshToken(user: User): Promise<void> {
     this.logger.log(`saveRefreshToken: Saving refresh token for user ID: ${user.id}`);
+    
     const refreshToken = await this.createRefreshToken(user);
-    const existing = await this.refreshTokenRepository.findOne({ where: { userId: user.id } });
+    
+    // প্রথমে existing token খুঁজুন
+    const existing = await this.refreshTokenRepository.findOne({ 
+      where: { userId: user.id } 
+    });
+    
     if (existing) {
+      this.logger.log('saveRefreshToken: Updating existing token');
       existing.token = refreshToken.token;
       existing.dateCreatedUtc = refreshToken.dateCreatedUtc;
       existing.dateExpiresUtc = refreshToken.dateExpiresUtc;
       await this.refreshTokenRepository.save(existing);
-      this.logger.log('saveRefreshToken: Existing token updated.');
     } else {
-      user.refreshTokens = user.refreshTokens || [];
-      user.refreshTokens.push(refreshToken);
-      await this.userRepository.save(user);
-      this.logger.log('saveRefreshToken: New token saved.');
+      this.logger.log('saveRefreshToken: Creating new token');
+      // নতুন token create করুন এবং user এর সাথে associate করুন
+      refreshToken.user = user;
+      await this.refreshTokenRepository.save(refreshToken);
     }
+    
+    this.logger.log('saveRefreshToken: Token saved successfully');
   }
 }

@@ -1,6 +1,6 @@
 // src/account/account.controller.ts
-import { Controller, Post, Get, Put, Body, Req, UseGuards, Param, HttpException, HttpStatus } from '@nestjs/common';
-import { Request } from 'express';
+import { Controller, Post, Get, Put, Body, Req, UseGuards, Param, HttpException, HttpStatus, Res } from '@nestjs/common';
+import { Request, Response } from 'express';
 import { JwtAuthGuard } from '../shared/guards/jwt.guard';
 import { LoginDto } from '../shared/dtos/login.dto';
 import { RegisterDto } from '../shared/dtos/register.dto';
@@ -28,21 +28,35 @@ export class AccountController {
     this.logger.log('AccountController: Initialized');
   }
 
+  // src/account/account.controller.ts - refreshToken মেথড
   @UseGuards(JwtAuthGuard)
   @Post('refresh-token')
   async refreshToken(@Req() req: Request): Promise<UserDto> {
     this.logger.log(`refreshToken: Refresh request for user ID: ${req.user['userId']}`);
+    
+    // Cookie থেকে token পড়ুন
     const token = req.cookies[this.configService.get<string>('JWT_COOKIES_KEY') || 'eTravelAPIAppRefreshToken'];
     const userId = req.user['userId'];
+
+    this.logger.log(`refreshToken: User ID: ${userId}, Token from cookie: ${token ? 'exists' : 'missing'}`);
+
+    if (!token) {
+      this.logger.error('refreshToken: No token found in cookies');
+      throw new HttpException('Invalid or expired token, please try to login', HttpStatus.UNAUTHORIZED);
+    }
 
     if (await this.jwtService.isValidRefreshToken(userId, token)) {
       const user = await this.userService.findByIdAsync(userId);
       if (!user) {
+        this.logger.error(`refreshToken: User not found for ID: ${userId}`);
         throw new HttpException('Invalid or expired token, please try to login', HttpStatus.UNAUTHORIZED);
       }
+      
+      this.logger.log(`refreshToken: Token valid for user: ${user.userName}`);
       return await this.createApplicationUserDto(user);
     }
 
+    this.logger.error('refreshToken: Invalid or expired refresh token');
     throw new HttpException('Invalid or expired token, please try to login', HttpStatus.UNAUTHORIZED);
   }
 
@@ -67,7 +81,7 @@ export class AccountController {
 
   // src/account/account.controller.ts
   @Post('login')
-  async login(@Body() model: LoginDto): Promise<UserDto> {
+  async login(@Body() model: LoginDto, @Res({ passthrough: true }) res: Response): Promise<UserDto> {
     const user = await this.userService.findByNameAsync(model.userName);
     if (!user) throw new HttpException('Invalid username or password', HttpStatus.UNAUTHORIZED);
 
@@ -102,7 +116,7 @@ export class AccountController {
       );
     }
 
-    return await this.createApplicationUserDto(user);
+    return await this.createApplicationUserDto(user, res);
   }
 
   @Post('register')
@@ -192,12 +206,33 @@ export class AccountController {
   }
 
   // Helpers
-  private async createApplicationUserDto(user: User): Promise<UserDto> {
+  // src/account/account.controller.ts - createApplicationUserDto মেথড
+  private async createApplicationUserDto(user: User, @Res({ passthrough: true }) res?: Response): Promise<UserDto> {
     await this.jwtService.saveRefreshToken(user);
+    
+    // User কে refresh tokens সহ পুনরায় লোড করুন
     user = await this.userService.findByIdAsync(user.id);
 
     if (!user.refreshTokens || user.refreshTokens.length === 0) {
       throw new Error('Refresh token not generated');
+    }
+
+    const latestRefreshToken = user.refreshTokens[user.refreshTokens.length - 1];
+    
+    // ASP.NET এর মত response এ cookie সেট করুন
+    if (res) {
+      const cookieOptions = {
+        expires: latestRefreshToken.dateExpiresUtc,
+        httpOnly: true,
+        secure: true, // HTTPS এর জন্য
+        sameSite: 'none' as const, // Cross-site requests এর জন্য
+      };
+      
+      res.cookie(
+        this.configService.get<string>('JWT_COOKIES_KEY') || 'eTravelAPIAppRefreshToken',
+        latestRefreshToken.token,
+        cookieOptions
+      );
     }
 
     return {
