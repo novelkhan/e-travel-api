@@ -32,7 +32,7 @@ import { JwtStrategy } from './shared/strategies/jwt.strategy'; // নতুন 
     TypeOrmModule.forRootAsync({
       useFactory: (configService: ConfigService) => ({
         type: 'postgres',
-        url: configService.get<string>('DATABASE_URL') || 'postgresql://e_travel_user:wOTk40ldQYvHL1Ym1LhGdTCEafh3NeYD@dpg-d2ndo675r7bs73feu7n0-a.oregon-postgres.render.com/e_travel',
+        url: configService.get<string>('DATABASE_URL') || 'postgresql://e_travel_6cz3_user:lXUjYQ8Qk3OTLvUqJ7khwcihAK0tUx1q@dpg-d3bu9cogjchc738p3700-a.oregon-postgres.render.com/e_travel_6cz3',
         entities: [User, RefreshToken, Package, PackageData, PackageImage, Order, OrderItem, CustomerData, CustomerFile, CartItem, Role, UserRole],
         synchronize: false,  // এটা false করো
         ssl: {
