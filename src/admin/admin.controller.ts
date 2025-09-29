@@ -1,17 +1,19 @@
-import { Controller, Get, Post, Put, Delete, Param, Body, UseGuards, HttpStatus, Res } from '@nestjs/common';
+// src/admin/admin.controller.ts
+import { Controller, Get, Post, Put, Delete, Param, Body, UseGuards, HttpStatus, Res, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Response } from 'express';
 import { JwtAuthGuard } from '../shared/guards/jwt.guard';
 import { RolesGuard } from '../shared/guards/roles.guard';
 import { Roles } from '../shared/decorators/roles.decorator';
 import { MemberAddEditDto } from '../shared/dtos/member-add-edit.dto';
 import { MemberViewDto } from '../shared/dtos/member-view.dto';
 import { UserService } from '../shared/services/user.service';
-import { Response } from 'express';
 import * as bcrypt from 'bcrypt';
 import { User } from '../shared/entities/user.entity';
 import { Repository } from 'typeorm';
 import { Role } from '../shared/entities/role.entity';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Not } from 'typeorm';
+import { ResponseUtil } from '../shared/utils/response.util'; // নতুন যোগ করুন
 
 @Controller('admin')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -23,7 +25,7 @@ export class AdminController {
   ) {}
 
   @Get('get-members')
-  async getMembers(): Promise<MemberViewDto[]> {
+  async getMembers(@Res() res: Response) {
     const members = await this.userService.findAllAsync({
       where: { userName: Not('novel4004@gmail.com') },
       relations: ['userRoles', 'userRoles.role'],
@@ -40,17 +42,19 @@ export class AdminController {
         roles: member.userRoles.map(ur => ur.role.name),
       }))
     );
-    return memberDtos;
+    
+    return res.status(HttpStatus.OK).json(ResponseUtil.successData(memberDtos));
   }
 
   @Get('get-member/:id')
-  async getMember(@Param('id') id: string): Promise<MemberAddEditDto> {
+  async getMember(@Param('id') id: string, @Res() res: Response) {
     const member = await this.userService.findOneAsync({
       where: { id, userName: Not('novel4004@gmail.com') },
       relations: ['userRoles', 'userRoles.role'],
     });
-    if (!member) throw new Error('Member not found');
-    return {
+    if (!member) throw new NotFoundException('Member not found');
+    
+    const memberDto: MemberAddEditDto = {
       id: member.id,
       userName: member.userName,
       firstName: member.firstName,
@@ -58,42 +62,36 @@ export class AdminController {
       password: null,
       roles: member.userRoles.map(ur => ur.role.name).join(','),
     };
+    
+    return res.status(HttpStatus.OK).json(ResponseUtil.successData(memberDto));
   }
 
-  // src/admin/admin.controller.ts
   @Post('add-edit-member')
   async addEditMember(@Body() model: MemberAddEditDto, @Res() res: Response) {
     let user: User;
 
     if (!model.id) {
-      // Adding new member - Admin দ্বারা add করছে
       if (!model.password || model.password.length < 6) {
-        res.status(HttpStatus.BAD_REQUEST).json('Password must be at least 6 characters');
-        return;
+        throw new BadRequestException('Password must be at least 6 characters');
       }
-      
-      // Admin দ্বারা user create করলে email confirmed=true দিয়ে create করুন
+
       user = await this.userService.createAsync({
         firstName: model.firstName.toLowerCase(),
         lastName: model.lastName.toLowerCase(),
         email: model.userName.toLowerCase(),
         password: model.password,
-      }, true); // দ্বিতীয় parameter true pass করুন
-      
-      res.json({ title: 'Member Created', message: `${model.userName} has been created` });
+      }, true);
     } else {
-      // Editing existing member
       if (model.password && model.password.length < 6) {
-        res.status(HttpStatus.BAD_REQUEST).json('Password must be at least 6 characters');
-        return;
+        throw new BadRequestException('Password must be at least 6 characters');
       }
+      
       if (await this.isAdminUserId(model.id)) {
-        res.status(HttpStatus.BAD_REQUEST).json('Super Admin change is not allowed');
-        return;
+        throw new BadRequestException('Super Admin change is not allowed!');
       }
       
       user = await this.userService.findByIdAsync(model.id);
-      if (!user) throw new Error('User not found');
+      if (!user) throw new NotFoundException('User not found');
       
       user.firstName = model.firstName.toLowerCase();
       user.lastName = model.lastName.toLowerCase();
@@ -104,76 +102,105 @@ export class AdminController {
       }
       
       await this.userService.updateAsync(user);
-      res.json({ title: 'Member Edited', message: `${model.userName} has been updated` });
     }
 
-    // Roles management
     const userRoles = await this.userService.getRolesAsync(user);
     await this.userService.removeFromRolesAsync(user, userRoles);
 
     for (const role of model.roles.split(',')) {
       await this.userService.addToRoleAsync(user, role.trim());
     }
+
+    if (!model.id) {
+      return res.status(HttpStatus.OK).json(ResponseUtil.success('Member Created', `${model.userName} has been created`));
+    } else {
+      return res.status(HttpStatus.OK).json(ResponseUtil.success('Member Edited', `${model.userName} has been updated`));
+    }
   }
 
   @Put('lock-member/:id')
-  async lockMember(@Param('id') id: string) {
+  async lockMember(@Param('id') id: string, @Res() res: Response) {
     const user = await this.userService.findByIdAsync(id);
-    if (!user) throw new Error('User not found');
-    if (await this.isAdminUserId(id)) throw new Error('Super Admin change is not allowed');
+    if (!user) throw new NotFoundException('User not found');
     
-    // 24 ঘন্টার জন্য lockout
+    if (await this.isAdminUserId(id)) {
+      throw new BadRequestException('Super Admin change is not allowed!');
+    }
+    
     user.lockoutEnd = new Date(Date.now() + 24 * 60 * 60 * 1000);
     user.lockoutEnabled = true;
     await this.userService.updateAsync(user);
     
-    return { message: 'User locked successfully' };
+    return res.status(HttpStatus.NO_CONTENT).send();
   }
 
   @Put('unlock-member/:id')
-  async unlockMember(@Param('id') id: string) {
+  async unlockMember(@Param('id') id: string, @Res() res: Response) {
     const user = await this.userService.findByIdAsync(id);
-    if (!user) throw new Error('User not found');
-    if (await this.isAdminUserId(id)) throw new Error('Super Admin change is not allowed');
+    if (!user) throw new NotFoundException('User not found');
+    
+    if (await this.isAdminUserId(id)) {
+      throw new BadRequestException('Super Admin change is not allowed!');
+    }
     
     user.lockoutEnd = null;
     user.lockoutEnabled = false;
     user.accessFailedCount = 0;
     await this.userService.updateAsync(user);
     
-    return { message: 'User unlocked successfully' };
+    return res.status(HttpStatus.NO_CONTENT).send();
   }
 
   @Put('unConfirmEmail/:id')
-  async unConfirmEmail(@Param('id') id: string) {
+  async unConfirmEmail(@Param('id') id: string, @Res() res: Response) {
     const user = await this.userService.findByIdAsync(id);
-    if (!user) throw new Error('User not found');
-    if (await this.isAdminUserId(id)) throw new Error('Super Admin change is not allowed');
+    if (!user) throw new NotFoundException('User not found');
+    
+    if (await this.isAdminUserId(id)) {
+      throw new BadRequestException('Super Admin change is not allowed!');
+    }
+    
     user.emailConfirmed = false;
     await this.userService.updateAsync(user);
+    
+    return res.status(HttpStatus.NO_CONTENT).send();
   }
 
   @Put('confirmEmail/:id')
-  async confirmEmail(@Param('id') id: string) {
+  async confirmEmail(@Param('id') id: string, @Res() res: Response) {
     const user = await this.userService.findByIdAsync(id);
-    if (!user) throw new Error('User not found');
-    if (await this.isAdminUserId(id)) throw new Error('Super Admin change is not allowed');
+    if (!user) throw new NotFoundException('User not found');
+    
+    if (await this.isAdminUserId(id)) {
+      throw new BadRequestException('Super Admin change is not allowed!');
+    }
+    
     user.emailConfirmed = true;
     await this.userService.updateAsync(user);
+    
+    return res.status(HttpStatus.NO_CONTENT).send();
   }
 
   @Delete('delete-member/:id')
-  async deleteMember(@Param('id') id: string) {
+  async deleteMember(@Param('id') id: string, @Res() res: Response) {
     const user = await this.userService.findByIdAsync(id);
-    if (!user) throw new Error('User not found');
-    if (await this.isAdminUserId(id)) throw new Error('Super Admin change is not allowed');
+    if (!user) throw new NotFoundException('User not found');
+    
+    if (await this.isAdminUserId(id)) {
+      throw new BadRequestException('Super Admin change is not allowed!');
+    }
+    
     await this.userService.deleteAsync(user);
+    
+    return res.status(HttpStatus.NO_CONTENT).send();
   }
 
   @Get('get-application-roles')
-  async getApplicationRoles(): Promise<string[]> {
+  async getApplicationRoles(@Res() res: Response) {
     const roles = await this.roleRepository.find();
-    return roles.map(r => r.name);
+    const roleNames = roles.map(r => r.name);
+    
+    return res.status(HttpStatus.OK).json(ResponseUtil.successData(roleNames));
   }
 
   private async isAdminUserId(userId: string): Promise<boolean> {

@@ -1,13 +1,16 @@
-import { Controller, Post, Get, Put, Delete, Body, Param, UseGuards, HttpException, HttpStatus } from '@nestjs/common';
+// src/package/package.controller.ts
+import { Controller, Post, Get, Put, Body, Param, UseGuards, HttpStatus, Res, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Response } from 'express';
 import { JwtAuthGuard } from '../shared/guards/jwt.guard';
 import { RolesGuard } from '../shared/guards/roles.guard';
-import { Roles } from '../shared/decorators/roles.decorator'; // Use custom Roles decorator
+import { Roles } from '../shared/decorators/roles.decorator';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { AddPackageDto } from '../shared/dtos/add-package.dto';
 import { Package } from '../shared/entities/package.entity';
 import { PackageData } from '../shared/entities/package-data.entity';
 import { PackageImage } from '../shared/entities/package-image.entity';
+import { ResponseUtil } from '../shared/utils/response.util';
 
 @Controller('package')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -20,41 +23,58 @@ export class PackageController {
 
   @Post('add-package')
   @Roles('Admin')
-  async addPackage(@Body() addPackageDto: AddPackageDto) {
+  async addPackage(@Body() addPackageDto: AddPackageDto, @Res() res: Response) {
     const packageEntity = this.packageRepo.create({
       packageName: addPackageDto.packagename,
       destination: addPackageDto.destination,
       price: addPackageDto.price,
     });
+    
     await this.packageRepo.save(packageEntity);
-    return { title: 'Package Added', message: `${addPackageDto.packagename} package has been added successfully` };
+    
+    return res.status(HttpStatus.OK).json(ResponseUtil.success('Package Added', `${addPackageDto.packagename} package has been added successfully`));
   }
 
   @Get('packages')
-  async getPackages(): Promise<Package[]> {
-    return this.packageRepo.find();
+  async getPackages(@Res() res: Response) {
+    const packages = await this.packageRepo.find();
+    
+    if (packages.length === 0) {
+      throw new NotFoundException('No packages found');
+    }
+    
+    return res.status(HttpStatus.OK).json(packages);
   }
 
   @Get('package/:id')
-  async getPackage(@Param('id') id: number) {
+  async getPackage(@Param('id') id: number, @Res() res: Response) {
     const packageEntity = await this.packageRepo.findOne({
       where: { packageId: id },
       relations: ['packageData', 'packageData.packageImages'],
     });
-    if (!packageEntity) throw new HttpException('Not Found', HttpStatus.NOT_FOUND);
-    return packageEntity;
+    
+    if (!packageEntity) {
+      throw new NotFoundException('Package not found');
+    }
+
+    return res.status(HttpStatus.OK).json(packageEntity);
   }
 
   @Put('package/:id')
   @Roles('Admin')
-  async putPackage(@Param('id') id: number, @Body() packageBody: Package) {
-    if (id !== packageBody.packageId) throw new HttpException('Package ID does not match.', HttpStatus.BAD_REQUEST);
+  async putPackage(@Param('id') id: number, @Body() packageBody: Package, @Res() res: Response) {
+    if (id !== packageBody.packageId) {
+      throw new BadRequestException('Package ID does not match.');
+    }
 
     const existingPackage = await this.packageRepo.findOne({
       where: { packageId: id },
       relations: ['packageData', 'packageData.packageImages'],
     });
-    if (!existingPackage) throw new HttpException('Package not found.', HttpStatus.NOT_FOUND);
+    
+    if (!existingPackage) {
+      throw new NotFoundException('Package not found.');
+    }
 
     existingPackage.packageName = packageBody.packageName;
     existingPackage.destination = packageBody.destination;
@@ -77,7 +97,7 @@ export class PackageController {
         existingPackage.packageData.availableSeat = packageBody.packageData.availableSeat;
       }
 
-      // Image handling (assuming filebytes are base64 or buffer in body)
+      // Image handling
       if (packageBody.packageData.packageImages && packageBody.packageData.packageImages.length > 0) {
         const imageIdsToKeep = packageBody.packageData.packageImages
           .filter(img => img.packageImageId > 0)
@@ -92,7 +112,7 @@ export class PackageController {
               existingImage.filename = newImage.filename;
               existingImage.filetype = newImage.filetype;
               existingImage.filesize = newImage.filesize;
-              existingImage.filebytes = newImage.filebytes; // Assume buffer
+              existingImage.filebytes = newImage.filebytes;
             }
           } else {
             const image = this.packageImageRepo.create({
@@ -111,6 +131,7 @@ export class PackageController {
     }
 
     await this.packageRepo.save(existingPackage);
-    return { message: 'Package updated successfully.' };
+    
+    return res.status(HttpStatus.OK).json(ResponseUtil.successMessage('Package updated successfully.'));
   }
 }

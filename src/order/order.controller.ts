@@ -1,7 +1,6 @@
-// ------------------------------------------------
 // src/order/order.controller.ts
-// ------------------------------------------------
-import { Controller, Post, Get, Body, UseGuards, Req, Param, HttpException, HttpStatus } from '@nestjs/common';
+import { Controller, Post, Get, Body, UseGuards, Req, Param, HttpStatus, Res, BadRequestException, NotFoundException, UnauthorizedException } from '@nestjs/common';
+import { Response } from 'express';
 import { JwtAuthGuard } from '../shared/guards/jwt.guard';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -11,6 +10,7 @@ import { CartItem } from '../shared/entities/cart-item.entity';
 import { Package } from '../shared/entities/package.entity';
 import { Request } from 'express';
 import { User } from 'src/shared/entities/user.entity';
+import { ResponseUtil } from '../shared/utils/response.util';
 
 @Controller('order')
 @UseGuards(JwtAuthGuard)
@@ -24,23 +24,33 @@ export class OrderController {
   ) {}
 
   private async getCurrentUserAsync(req: Request): Promise<User> {
-    return this.userRepo.findOne({
+    const user = await this.userRepo.findOne({
       where: { id: req.user['userId'] },
       relations: ['customerData', 'customerData.cart'],
     });
+    
+    if (!user) {
+      throw new UnauthorizedException('User not found');
+    }
+    
+    return user;
   }
 
   @Post('cart-checkout')
-  async cartCheckout(@Body() selectedCartItemsId: number[], @Req() req: Request) {
+  async cartCheckout(@Body() selectedCartItemsId: number[], @Req() req: Request, @Res() res: Response) {
     const user = await this.getCurrentUserAsync(req);
-    if (!user || !user.customerData) throw new HttpException('Unauthorized', HttpStatus.UNAUTHORIZED);
+    if (!user.customerData) {
+      throw new UnauthorizedException('Customer data not found');
+    }
 
     const selectedCartItems = user.customerData.cart.filter(item => selectedCartItemsId.includes(item.cartItemId));
-    if (selectedCartItems.length === 0) throw new HttpException('No items selected for checkout.', HttpStatus.BAD_REQUEST);
+    if (selectedCartItems.length === 0) {
+      throw new BadRequestException('No items selected for checkout.');
+    }
 
     const order = this.orderRepo.create({
       customerId: user.id,
-      orderDate: new Date(Date.now() + 6 * 60 * 60 * 1000), // Add 6 hours
+      orderDate: new Date(Date.now() + 6 * 60 * 60 * 1000),
       orderItems: [],
       totalAmount: 0,
       isPaid: true,
@@ -72,19 +82,21 @@ export class OrderController {
       await this.removeFromCart(cartItemId, user);
     }
 
-    return { message: 'Order placed successfully.', orderId: order.orderId };
+    return res.status(HttpStatus.OK).json(ResponseUtil.successWithData('Order placed successfully', 'Order placed successfully.', { orderId: order.orderId }));
   }
 
   @Post('single-checkout')
-  async singleCheckout(@Body() body: { packageId: number }, @Req() req: Request) {
+  async singleCheckout(@Body() body: { packageId: number }, @Req() req: Request, @Res() res: Response) {
     const user = await this.getCurrentUserAsync(req);
-    if (!user) throw new HttpException('Unauthorized', HttpStatus.UNAUTHORIZED);
 
     const product = await this.packageRepo.findOne({
       where: { packageId: body.packageId },
       relations: ['packageData', 'packageData.packageImages'],
     });
-    if (!product) throw new HttpException('Package not found.', HttpStatus.NOT_FOUND);
+    
+    if (!product) {
+      throw new NotFoundException('Package not found.');
+    }
 
     const order = this.orderRepo.create({
       customerId: user.id,
@@ -105,21 +117,24 @@ export class OrderController {
     });
 
     await this.orderRepo.save(order);
-    return { message: 'Order placed successfully.', orderId: order.orderId };
+    
+    return res.status(HttpStatus.OK).json(ResponseUtil.successWithData('Order placed successfully', 'Order placed successfully.', { orderId: order.orderId }));
   }
 
   @Get('order-details/:orderId')
-  async orderDetails(@Param('orderId') orderId: number, @Req() req: Request) {
+  async orderDetails(@Param('orderId') orderId: number, @Req() req: Request, @Res() res: Response) {
     const user = await this.getCurrentUserAsync(req);
-    if (!user) throw new HttpException('Unauthorized', HttpStatus.UNAUTHORIZED);
 
     const order = await this.orderRepo.findOne({
       where: { orderId, customerId: user.id },
       relations: ['orderItems'],
     });
-    if (!order) throw new HttpException('Not Found', HttpStatus.NOT_FOUND);
+    
+    if (!order) {
+      throw new NotFoundException('Order not found');
+    }
 
-    return {
+    const orderDetails = {
       orderId: order.orderId,
       orderDate: order.orderDate,
       totalAmount: order.totalAmount,
@@ -135,18 +150,20 @@ export class OrderController {
         totalPrice: oi.totalPrice,
       })),
     };
+    
+    return res.status(HttpStatus.OK).json(orderDetails);
   }
 
   @Post('order-history')
-  async orderHistory(@Req() req: Request) {
+  async orderHistory(@Req() req: Request, @Res() res: Response) {
     const user = await this.getCurrentUserAsync(req);
-    if (!user) throw new HttpException('Unauthorized', HttpStatus.UNAUTHORIZED);
 
     const orders = await this.orderRepo.find({
       where: { customerId: user.id },
       relations: ['orderItems'],
     });
-    return orders.map(order => ({
+    
+    const orderHistory = orders.map(order => ({
       orderId: order.orderId,
       orderDate: order.orderDate,
       totalAmount: order.totalAmount,
@@ -162,12 +179,17 @@ export class OrderController {
         totalPrice: oi.totalPrice,
       })),
     }));
+    
+    return res.status(HttpStatus.OK).json(orderHistory);
   }
 
   private async removeFromCart(cartItemId: number, user: User) {
     const cartItem = await this.cartItemRepo.findOne({
       where: { cartItemId, customerDataId: user.customerData.customerDataId },
     });
-    if (cartItem) await this.cartItemRepo.remove(cartItem);
+    
+    if (cartItem) {
+      await this.cartItemRepo.remove(cartItem);
+    }
   }
 }

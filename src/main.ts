@@ -2,13 +2,21 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
-import * as cookieParser from 'cookie-parser'; // এই লাইনটি ঠিক আছে
+import * as cookieParser from 'cookie-parser';
+import { HttpExceptionFilter } from './shared/filters/http-exception.filter';
+import { ValidationPipe } from './shared/pipes/validation.pipe';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
-  // Cookie parser যোগ করুন - এভাবে ব্যবহার করুন
+  // Cookie parser যোগ করুন
   app.use(cookieParser());
+  
+  // Global exception filter যোগ করুন
+  app.useGlobalFilters(new HttpExceptionFilter());
+  
+  // Global validation pipe যোগ করুন - ASP.NET Core এর মতো validation errors এর জন্য
+  app.useGlobalPipes(new ValidationPipe());
 
   // CORS setup
   app.enableCors({

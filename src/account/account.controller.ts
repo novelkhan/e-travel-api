@@ -1,5 +1,5 @@
 // src/account/account.controller.ts
-import { Controller, Post, Get, Put, Body, Req, UseGuards, Param, HttpException, HttpStatus, Res } from '@nestjs/common';
+import { Controller, Post, Get, Put, Body, Req, UseGuards, Param, HttpStatus, Res, UnauthorizedException, BadRequestException } from '@nestjs/common';
 import { Request, Response } from 'express';
 import { JwtAuthGuard } from '../shared/guards/jwt.guard';
 import { LoginDto } from '../shared/dtos/login.dto';
@@ -14,6 +14,7 @@ import { UserService } from '../shared/services/user.service';
 import { ConfigService } from '@nestjs/config';
 import { User } from 'src/shared/entities/user.entity';
 import { Logger } from '@nestjs/common';
+import { ResponseUtil } from '../shared/utils/response.util'; // নতুন যোগ করুন
 
 @Controller('account')
 export class AccountController {
@@ -28,189 +29,161 @@ export class AccountController {
     this.logger.log('AccountController: Initialized');
   }
 
-  // src/account/account.controller.ts - refreshToken মেথড
   @UseGuards(JwtAuthGuard)
   @Post('refresh-token')
   async refreshToken(@Req() req: Request): Promise<UserDto> {
     this.logger.log(`refreshToken: Refresh request for user ID: ${req.user['userId']}`);
     
-    // Cookie থেকে token পড়ুন
     const token = req.cookies[this.configService.get<string>('JWT_COOKIES_KEY') || 'eTravelAPIAppRefreshToken'];
     const userId = req.user['userId'];
 
-    this.logger.log(`refreshToken: User ID: ${userId}, Token from cookie: ${token ? 'exists' : 'missing'}`);
-
     if (!token) {
-      this.logger.error('refreshToken: No token found in cookies');
-      throw new HttpException('Invalid or expired token, please try to login', HttpStatus.UNAUTHORIZED);
+      throw new UnauthorizedException('Invalid or expired token, please try to login');
     }
 
     if (await this.jwtService.isValidRefreshToken(userId, token)) {
       const user = await this.userService.findByIdAsync(userId);
       if (!user) {
-        this.logger.error(`refreshToken: User not found for ID: ${userId}`);
-        throw new HttpException('Invalid or expired token, please try to login', HttpStatus.UNAUTHORIZED);
+        throw new UnauthorizedException('Invalid or expired token, please try to login');
       }
       
-      this.logger.log(`refreshToken: Token valid for user: ${user.userName}`);
       return await this.createApplicationUserDto(user);
     }
 
-    this.logger.error('refreshToken: Invalid or expired refresh token');
-    throw new HttpException('Invalid or expired token, please try to login', HttpStatus.UNAUTHORIZED);
+    throw new UnauthorizedException('Invalid or expired token, please try to login');
   }
 
-  // src/account/account.controller.ts
   @UseGuards(JwtAuthGuard)
   @Get('refresh-page')
   async refreshPage(@Req() req: Request): Promise<UserDto> {
     const user = await this.userService.findByNameAsync(req.user['username']);
-    if (!user) throw new HttpException('User not found', HttpStatus.UNAUTHORIZED);
+    if (!user) throw new UnauthorizedException('User not found');
 
-    // Lockout status চেক করুন
     if (await this.userService.isLockedOutAsync(user)) {
       const lockoutEnd = user.lockoutEnd.toUTCString();
-      throw new HttpException(
-        `Your account has been locked. You should wait until ${lockoutEnd} (UTC time) to be able to login`,
-        HttpStatus.UNAUTHORIZED,
-      );
+      throw new UnauthorizedException(`Your account has been locked. You should wait until ${lockoutEnd} (UTC time) to be able to login`);
     }
 
     return await this.createApplicationUserDto(user);
   }
 
-  // src/account/account.controller.ts
   @Post('login')
   async login(@Body() model: LoginDto, @Res({ passthrough: true }) res: Response): Promise<UserDto> {
     const user = await this.userService.findByNameAsync(model.userName);
-    if (!user) throw new HttpException('Invalid username or password', HttpStatus.UNAUTHORIZED);
+    if (!user) throw new UnauthorizedException('Invalid username or password');
 
-    // প্রথমেই lockout status চেক করুন
     if (await this.userService.isLockedOutAsync(user)) {
       const lockoutEnd = user.lockoutEnd.toUTCString();
-      throw new HttpException(
-        `Your account has been locked. You should wait until ${lockoutEnd} (UTC time) to be able to login`,
-        HttpStatus.UNAUTHORIZED,
-      );
+      throw new UnauthorizedException(`Your account has been locked. You should wait until ${lockoutEnd} (UTC time) to be able to login`);
     }
 
     if (!user.emailConfirmed) {
-      throw new HttpException('Please confirm your email.', HttpStatus.UNAUTHORIZED);
+      throw new UnauthorizedException('Please confirm your email.');
     }
 
     const result = await this.userService.checkPasswordSignInAsync(user, model.password);
 
     if (result.isLockedOut) {
       const lockoutEnd = user.lockoutEnd.toUTCString();
-      throw new HttpException(
-        `Your account has been locked. You should wait until ${lockoutEnd} (UTC time) to be able to login`,
-        HttpStatus.UNAUTHORIZED,
-      );
+      throw new UnauthorizedException(`Your account has been locked. You should wait until ${lockoutEnd} (UTC time) to be able to login`);
     }
 
     if (!result.succeeded) {
       const remainingAttempts = 3 - user.accessFailedCount;
-      throw new HttpException(
-        `Invalid username or password. ${remainingAttempts} attempt(s) remaining before lockout.`,
-        HttpStatus.UNAUTHORIZED,
-      );
+      throw new UnauthorizedException(`Invalid username or password. ${remainingAttempts} attempt(s) remaining before lockout.`);
     }
 
     return await this.createApplicationUserDto(user, res);
   }
 
   @Post('register')
-  async register(@Body() model: RegisterDto) {
+  async register(@Body() model: RegisterDto, @Res() res: Response) {
     if (await this.userService.usersAnyAsync({ email: model.email.toLowerCase() })) {
-      throw new HttpException(
-        `An existing account is using ${model.email}, please try another email`,
-        HttpStatus.BAD_REQUEST,
-      );
+      throw new BadRequestException(`An existing account is using ${model.email}, email address. Please try with another email address`);
     }
 
     const user = await this.userService.createAsync(model);
     await this.userService.addToRoleAsync(user, 'Customer');
 
     const emailSent = await this.sendConfirmEmailAsync(user);
-    if (!emailSent) throw new HttpException('Failed to send email. Please contact admin', HttpStatus.BAD_REQUEST);
+    if (!emailSent) throw new BadRequestException('Failed to send email. Please contact admin');
 
-    return { title: 'Account Created', message: 'Your account has been created, please confirm your email address' };
+    // ResponseUtil ব্যবহার করে simplified response
+    return res.status(HttpStatus.OK).json(ResponseUtil.success('Account Created', 'Your account has been created, please confirm your email address'));
   }
 
   @Put('confirm-email')
-  async confirmEmail(@Body() model: ConfirmEmailDto) {
+  async confirmEmail(@Body() model: ConfirmEmailDto, @Res() res: Response) {
     const user = await this.userService.findByEmailAsync(model.email);
-    if (!user) throw new HttpException('This email is not registered', HttpStatus.UNAUTHORIZED);
+    if (!user) throw new UnauthorizedException('This email address has not been registered yet');
 
     if (user.emailConfirmed) {
-      throw new HttpException('Your email was confirmed before. Please login.', HttpStatus.BAD_REQUEST);
+      throw new BadRequestException('Your email was confirmed before. Please login to your account');
     }
 
     const decodedToken = Buffer.from(model.token, 'base64url').toString('utf-8');
     const result = await this.userService.confirmEmailAsync(user, decodedToken);
 
-    if (!result) throw new HttpException('Invalid token. Please try again', HttpStatus.BAD_REQUEST);
+    if (!result) throw new BadRequestException('Invalid token. Please try again');
 
-    return { title: 'Email confirmed', message: 'You can login now' };
+    return res.status(HttpStatus.OK).json(ResponseUtil.success('Email confirmed', 'Your email address is confirmed. You can login now'));
   }
 
   @Post('resend-email-confirmation-link/:email')
-  async resendEmailConfirmationLink(@Param('email') email: string) {
-    if (!email) throw new HttpException('Invalid email', HttpStatus.BAD_REQUEST);
+  async resendEmailConfirmationLink(@Param('email') email: string, @Res() res: Response) {
+    if (!email) throw new BadRequestException('Invalid email');
 
     const user = await this.userService.findByEmailAsync(email);
-    if (!user) throw new HttpException('This email is not registered', HttpStatus.UNAUTHORIZED);
+    if (!user) throw new UnauthorizedException('This email address has not been registered yet');
 
     if (user.emailConfirmed) {
-      throw new HttpException('Your email was confirmed before. Please login.', HttpStatus.BAD_REQUEST);
+      throw new BadRequestException('Your email address was confirmed before. Please login to your account');
     }
 
     const sent = await this.sendConfirmEmailAsync(user);
-    if (!sent) throw new HttpException('Failed to send email. Please contact admin', HttpStatus.BAD_REQUEST);
+    if (!sent) throw new BadRequestException('Failed to send email. Please contact admin');
 
-    return { title: 'Confirmation link sent', message: 'Please confirm your email address' };
+    return res.status(HttpStatus.OK).json(ResponseUtil.success('Confirmation link sent', 'Please confirm your email address'));
   }
 
   @Post('forgot-username-or-password/:email')
-  async forgotUsernameOrPassword(@Param('email') email: string) {
-    if (!email) throw new HttpException('Invalid email', HttpStatus.BAD_REQUEST);
+  async forgotUsernameOrPassword(@Param('email') email: string, @Res() res: Response) {
+    if (!email) throw new BadRequestException('Invalid email');
 
     const user = await this.userService.findByEmailAsync(email);
-    if (!user) throw new HttpException('This email is not registered', HttpStatus.UNAUTHORIZED);
+    if (!user) throw new UnauthorizedException('This email address has not been registered yet');
 
     if (!user.emailConfirmed) {
-      throw new HttpException('Please confirm your email first.', HttpStatus.BAD_REQUEST);
+      throw new BadRequestException('Please confirm your email address first.');
     }
 
     const sent = await this.sendForgotUsernameOrPasswordEmail(user);
-    if (!sent) throw new HttpException('Failed to send email. Please contact admin', HttpStatus.BAD_REQUEST);
+    if (!sent) throw new BadRequestException('Failed to send email. Please contact admin');
 
-    return { title: 'Email sent', message: 'Please check your email' };
+    return res.status(HttpStatus.OK).json(ResponseUtil.success('Forgot username or password email sent', 'Please check your email'));
   }
 
   @Put('reset-password')
-  async resetPassword(@Body() model: ResetPasswordDto) {
+  async resetPassword(@Body() model: ResetPasswordDto, @Res() res: Response) {
     const user = await this.userService.findByEmailAsync(model.email);
-    if (!user) throw new HttpException('This email is not registered', HttpStatus.UNAUTHORIZED);
+    if (!user) throw new UnauthorizedException('This email address has not been registered yet');
 
     if (!user.emailConfirmed) {
-      throw new HttpException('Please confirm your email first.', HttpStatus.BAD_REQUEST);
+      throw new BadRequestException('Please confirm your email address first');
     }
 
     const decodedToken = Buffer.from(model.token, 'base64url').toString('utf-8');
     const result = await this.userService.resetPasswordAsync(user, decodedToken, model.newPassword);
 
-    if (!result) throw new HttpException('Invalid token. Please try again', HttpStatus.BAD_REQUEST);
+    if (!result) throw new BadRequestException('Invalid token. Please try again');
 
-    return { title: 'Password reset success', message: 'Your password has been reset' };
+    return res.status(HttpStatus.OK).json(ResponseUtil.success('Password reset success', 'Your password has been reset'));
   }
 
   // Helpers
-  // src/account/account.controller.ts - createApplicationUserDto মেথড
   private async createApplicationUserDto(user: User, @Res({ passthrough: true }) res?: Response): Promise<UserDto> {
     await this.jwtService.saveRefreshToken(user);
     
-    // User কে refresh tokens সহ পুনরায় লোড করুন
     user = await this.userService.findByIdAsync(user.id);
 
     if (!user.refreshTokens || user.refreshTokens.length === 0) {
@@ -219,13 +192,12 @@ export class AccountController {
 
     const latestRefreshToken = user.refreshTokens[user.refreshTokens.length - 1];
     
-    // ASP.NET এর মত response এ cookie সেট করুন
     if (res) {
       const cookieOptions = {
         expires: latestRefreshToken.dateExpiresUtc,
         httpOnly: true,
-        secure: true, // HTTPS এর জন্য
-        sameSite: 'none' as const, // Cross-site requests এর জন্য
+        secure: true,
+        sameSite: 'none' as const,
       };
       
       res.cookie(
